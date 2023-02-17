@@ -37,6 +37,7 @@ import java.util.Optional;
 import static org.mapstruct.ReportingPolicy.IGNORE;
 import static org.springframework.http.HttpMethod.POST;
 import static org.springframework.security.config.http.SessionCreationPolicy.STATELESS;
+import static org.springframework.security.web.util.matcher.AntPathRequestMatcher.antMatcher;
 
 @SpringBootApplication
 public class Demo4Application {
@@ -73,7 +74,7 @@ class UserEntity {
     @NaturalId @Column(unique = true, updatable = false)
     String name;
     String password;
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.EAGER) // try to remove fetch and debug the error
     Collection<String> authorities;
 }
 
@@ -83,16 +84,18 @@ class SecurityConfiguration {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http.authorizeHttpRequests(c -> c
-                .requestMatchers("/h2").permitAll()
+                .requestMatchers(antMatcher("/h2/**")).permitAll()
                 .requestMatchers(POST, "/register").permitAll()
                 .requestMatchers("/error").permitAll()
                 .anyRequest().authenticated());
         http.sessionManagement().sessionCreationPolicy(STATELESS);
         http.httpBasic();
 //        http.csrf().disable();
-        http.csrf().ignoringRequestMatchers("/register");
+        http.csrf()
+                .ignoringRequestMatchers("/register")
+                .ignoringRequestMatchers(antMatcher("/h2/**"));
 //        http.cors().disable();
-//        http.headers().frameOptions().disable();
+        http.headers().frameOptions().disable();
         return http.build();
     }
 
