@@ -4,18 +4,15 @@ import jakarta.persistence.*;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.*;
-import org.hibernate.annotations.NaturalId;
 import org.mapstruct.Mapper;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
@@ -36,6 +33,9 @@ import java.util.Optional;
 
 import static org.mapstruct.ReportingPolicy.IGNORE;
 import static org.springframework.http.HttpMethod.POST;
+import static org.springframework.http.HttpStatus.CONFLICT;
+import static org.springframework.http.HttpStatus.CREATED;
+import static org.springframework.security.config.Customizer.withDefaults;
 import static org.springframework.security.config.http.SessionCreationPolicy.STATELESS;
 import static org.springframework.security.web.util.matcher.AntPathRequestMatcher.antMatcher;
 
@@ -62,23 +62,24 @@ interface Mappers {
 
 interface UserRepository extends JpaRepository<UserEntity, Long> {
     Optional<UserEntity> findByNameIgnoreCase(String name);
+
     boolean existsByNameIgnoreCase(String name);
 }
 
-@Getter @Setter @NoArgsConstructor
-@Builder @AllArgsConstructor
+@Getter@Setter@NoArgsConstructor
+@Builder@AllArgsConstructor
 @Entity
 class UserEntity {
-    @Id @GeneratedValue
+    @Id@GeneratedValue
     Long id;
-    @NaturalId @Column(unique = true, updatable = false)
     String name;
     String password;
     @ElementCollection(fetch = FetchType.EAGER) // try to remove fetch and debug the error
     Collection<String> authorities;
 }
 
-@EnableWebSecurity @EnableMethodSecurity
+//@EnableWebSecurity // not needed anymore
+@EnableMethodSecurity
 @Configuration
 class SecurityConfiguration {
     @Bean
@@ -88,14 +89,16 @@ class SecurityConfiguration {
                 .requestMatchers(POST, "/register").permitAll()
                 .requestMatchers("/error").permitAll()
                 .anyRequest().authenticated());
-        http.sessionManagement().sessionCreationPolicy(STATELESS);
-        http.httpBasic();
-//        http.csrf().disable();
-        http.csrf()
-                .ignoringRequestMatchers("/register")
-                .ignoringRequestMatchers(antMatcher("/h2/**"));
-//        http.cors().disable();
-        http.headers().frameOptions().disable();
+        http.sessionManagement(c -> c.sessionCreationPolicy(STATELESS));
+        http.httpBasic(withDefaults());
+        http.csrf(c -> c.disable());
+//        http.csrf(c -> c
+//                .ignoringRequestMatchers("/register")
+//                .ignoringRequestMatchers(antMatcher("/h2/**")));
+        http.cors(c -> c.disable());
+        http.headers(c -> c
+                .frameOptions(с1 -> с1
+                        .disable()));
         return http.build();
     }
 
@@ -128,16 +131,18 @@ class TheController {
     }
 
     @PostMapping("/register")
-    @ResponseStatus(HttpStatus.CREATED)
+    @ResponseStatus(CREATED)
     CreatedUser register(@Valid @RequestBody NewUser newUser) {
         return mapper.toCreatedUser(service.register(newUser.name(), newUser.password()));
     }
 
     record NewUser(
             @NotBlank String name,
-            @NotBlank String password) {}
+            @NotBlank String password) {
+    }
 
-    record CreatedUser(Long id, String name) {}
+    record CreatedUser(Long id, String name) {
+    }
 }
 
 @AllArgsConstructor
@@ -156,7 +161,7 @@ class UserService {
                     .build()
             );
         else
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
+            throw new ResponseStatusException(CONFLICT,
                     "Username '" + username + "' is already occupied");
     }
 }
